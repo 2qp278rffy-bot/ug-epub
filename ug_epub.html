@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="UG→EPUB3">
+<title>🎸 UG → EPUB3</title>
+<style>
+:root{--accent:#1a56a0;--bg:#f5f5f7;--card:#fff;--fg:#1d1d1f;--lite:#6e6e73;--r:12px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--fg);
+  margin:0 auto;max-width:800px;padding:calc(env(safe-area-inset-top)+1.2rem) 1.2rem calc(env(safe-area-inset-bottom)+1.5rem)}
+h1{font-size:1.9rem;margin:0 0 .15rem}
+.sub{color:var(--lite);font-size:.9rem;margin-bottom:1.2rem}
+.banner{background:#fff9e6;border:1px solid #e6c84a;border-radius:var(--r);padding:.7rem 1rem;
+  font-size:.8rem;color:#555;margin-bottom:1.2rem}
+.legend{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:1.2rem}
+.legend span{padding:.2rem .65rem;border-radius:20px;font-size:.72rem;font-weight:700}
+.fg{margin-bottom:1rem}
+label{display:block;font-weight:600;font-size:.85rem;color:#444;margin-bottom:.35rem}
+input,textarea{width:100%;padding:.75rem 1rem;border:1.5px solid #d2d2d7;border-radius:var(--r);
+  font-size:1rem;background:var(--card);color:var(--fg);outline:none;-webkit-appearance:none;appearance:none}
+input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,86,160,.15)}
+textarea{font-family:'Menlo','Courier New',monospace;font-size:.82rem;height:300px;resize:vertical;
+  white-space:pre;-webkit-overflow-scrolling:touch}
+.hint{font-size:.75rem;color:var(--lite);margin-top:.3rem}
+.btns{display:flex;gap:.7rem;margin-top:1.2rem}
+button{flex:1;padding:.9rem 1rem;border:none;border-radius:var(--r);font-size:1rem;font-weight:700;cursor:pointer;-webkit-appearance:none}
+.bp{background:var(--accent);color:#fff}.bp:active{background:#0044aa}
+.bs{background:#e5e5ea;color:#333;flex:0;min-width:110px}.bs:active{background:#ccc}
+.bm{background:#2a2a3a;color:#fff;width:100%;margin-top:.75rem}.bm:active{background:#111}
+#status{display:none;margin-top:1rem;padding:.8rem 1rem;border-radius:var(--r);font-size:.9rem;font-weight:600}
+.ok{background:#edfff0;color:#1a7a1a;display:block!important}
+.err{background:#fff2f2;color:#c0392b;display:block!important}
+hr{border:none;border-top:1px solid #d2d2d7;margin:1.5rem 0}
+</style>
+</head>
+<body>
+<h1>🎸 UG → EPUB3</h1>
+<p class="sub">Converti testi con accordi da Ultimate Guitar in EPUB3 per iPad — funziona offline</p>
+
+<div class="banner">
+  💡 <strong>Salva come app:</strong> tocca <strong>↑ Condividi</strong> in Safari →
+  <strong>Aggiungi alla schermata Home</strong> — disponibile offline come un'app vera.
+</div>
+
+<div class="legend">
+  <span style="background:#eef4ff;color:#1a56a0;border:1px solid #1a56a0">■ Verse/Strofa</span>
+  <span style="background:#fff0ee;color:#c0392b;border:1px solid #c0392b">■ Chorus/Ritornello</span>
+  <span style="background:#f7eeff;color:#7b2fa8;border:1px solid #7b2fa8">■ Bridge/Ponte</span>
+  <span style="background:#edfaf7;color:#0a7a6a;border:1px solid #0a7a6a">■ Pre-chorus/Solo</span>
+  <span style="background:#f0f0f0;color:#5a5a5a;border:1px solid #5a5a5a">■ Intro/Outro</span>
+</div>
+
+<div class="fg"><label>Titolo della canzone</label>
+  <input type="text" id="titleInput" placeholder="Es. Volare" autocomplete="off"></div>
+<div class="fg"><label>Artista / Autore</label>
+  <input type="text" id="artistInput" placeholder="Es. Domenico Modugno" autocomplete="off"></div>
+<div class="fg">
+  <label>Testo con accordi &nbsp;(incolla da Ultimate Guitar — vista Chords)</label>
+  <textarea id="ugText" placeholder="[Verse 1]&#10;Am              F&#10;Nel blu dipinto di blu&#10;C                 G&#10;felice di stare lassù&#10;&#10;[Chorus]&#10;F         G          Am&#10;Volare oh oh, cantare oh oh oh oh"></textarea>
+  <p class="hint">Formato: accordi posizionati sopra le righe di testo</p>
+</div>
+
+<div class="btns">
+  <button class="bp" onclick="generateEpub()">📥 Genera EPUB3</button>
+  <button class="bs" onclick="clearFields()">🗑 Cancella</button>
+</div>
+<div id="status"></div>
+
+<hr>
+<button class="bm" onclick="mergeEpubs()">📚 Unisci EPUB in canzoniere</button>
+<p class="hint" style="text-align:center;margin-top:.4rem">Seleziona più file .epub → genera canzoniere con indice</p>
+
+<script>
+// ── CRC-32 ───────────────────────────────────────────────────────────────────
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[i]=c;}
+  return t;
+})();
+function crc32(data) {
+  let c = 0xFFFFFFFF;
+  for (let i=0;i<data.length;i++) c = CRC_TABLE[(c^data[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+
+// ── ZIP Writer (stored, no compression) ──────────────────────────────────────
+class ZipWriter {
+  constructor(){this.parts=[];this.cd=[];this.offset=0;}
+  add(name, data) {
+    const nb=new TextEncoder().encode(name), sz=data.length, crc=crc32(data);
+    const lh=new Uint8Array(30+nb.length);
+    const v=new DataView(lh.buffer);
+    v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);
+    v.setUint32(14,crc,true);v.setUint32(18,sz,true);v.setUint32(22,sz,true);
+    v.setUint16(26,nb.length,true);
+    lh.set(nb,30);
+    this.cd.push({nb,crc,sz,off:this.offset});
+    this.parts.push(lh,data);
+    this.offset+=lh.length+sz;
+  }
+  build() {
+    const cdStart=this.offset, cdParts=[];
+    for(const e of this.cd){
+      const cd=new Uint8Array(46+e.nb.length), v=new DataView(cd.buffer);
+      v.setUint32(0,0x02014b50,true);v.setUint16(4,20,true);v.setUint16(6,20,true);
+      v.setUint32(16,e.crc,true);v.setUint32(20,e.sz,true);v.setUint32(24,e.sz,true);
+      v.setUint16(28,e.nb.length,true);v.setUint32(42,e.off,true);
+      cd.set(e.nb,46);cdParts.push(cd);
+    }
+    const cdSize=cdParts.reduce((s,p)=>s+p.length,0);
+    const eocd=new Uint8Array(22), ev=new DataView(eocd.buffer);
+    ev.setUint32(0,0x06054b50,true);ev.setUint16(8,this.cd.length,true);
+    ev.setUint16(10,this.cd.length,true);ev.setUint32(12,cdSize,true);
+    ev.setUint32(16,cdStart,true);
+    const all=[...this.parts,...cdParts,eocd];
+    const tot=all.reduce((s,p)=>s+p.length,0), out=new Uint8Array(tot);
+    let p=0; for(const a of all){out.set(a,p);p+=a.length;}
+    return out;
+  }
+}
+
+// ── ZIP Reader (stored files only) ───────────────────────────────────────────
+function readZip(buffer) {
+  const b=new Uint8Array(buffer), v=new DataView(buffer), dec=new TextDecoder();
+  let eocd=-1;
+  for(let i=b.length-22;i>=0;i--){if(v.getUint32(i,true)===0x06054b50){eocd=i;break;}}
+  if(eocd<0) throw new Error('ZIP non valido');
+  const count=v.getUint16(eocd+10,true), cdOff=v.getUint32(eocd+16,true);
+  const entries={};
+  let pos=cdOff;
+  for(let i=0;i<count;i++){
+    if(v.getUint32(pos,true)!==0x02014b50) break;
+    const method=v.getUint16(pos+10,true), csz=v.getUint32(pos+20,true);
+    const nlen=v.getUint16(pos+28,true), elen=v.getUint16(pos+30,true), clen=v.getUint16(pos+32,true);
+    const loff=v.getUint32(pos+42,true);
+    const name=dec.decode(b.slice(pos+46,pos+46+nlen));
+    if(method===0){
+      const lnlen=v.getUint16(loff+26,true), lelen=v.getUint16(loff+28,true);
+      const doff=loff+30+lnlen+lelen;
+      entries[name]=b.slice(doff,doff+csz);
+    }
+    pos+=46+nlen+elen+clen;
+  }
+  return entries;
+}
+
+// ── HTML escaping ─────────────────────────────────────────────────────────────
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── EPUB CSS ──────────────────────────────────────────────────────────────────
+const EPUB_CSS = `body{font-family:Georgia,'Times New Roman',serif;font-size:1em;line-height:3.6;margin:1.5em 1.2em;color:#111}
+h1{font-size:1.7em;margin-bottom:.1em;color:#111;font-weight:bold}
+h2{font-size:1.05em;color:#777;font-weight:normal;margin-top:0;margin-bottom:1.8em}
+ruby{display:ruby}
+rt{font-weight:bold;font-size:1em;font-family:Helvetica,Arial,sans-serif}
+p{margin:0 0 .05em 0;font-weight:bold}
+p.section-intro,p.section-outro{color:#5a5a5a;background:#f0f0f0;border-left:3px solid #5a5a5a;padding:.15em .5em;font-weight:bold;font-size:.82em;font-family:Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:.07em;margin-top:1.4em;margin-bottom:.3em;line-height:1.4}
+.block-intro rt,.block-outro rt{color:#5a5a5a}.block-intro,.block-outro{color:#2a2a2a}
+p.section-verse{color:#1a56a0;background:#eef4ff;border-left:3px solid #1a56a0;padding:.15em .5em;font-weight:bold;font-size:.82em;font-family:Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:.07em;margin-top:1.4em;margin-bottom:.3em;line-height:1.4}
+.block-verse{color:#0a2040}.block-verse rt{color:#1a56a0}
+p.section-chorus{color:#c0392b;background:#fff0ee;border-left:3px solid #c0392b;padding:.15em .5em;font-weight:bold;font-size:.82em;font-family:Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:.07em;margin-top:1.4em;margin-bottom:.3em;line-height:1.4}
+.block-chorus{color:#400a0a}.block-chorus rt{color:#c0392b}
+p.section-bridge{color:#7b2fa8;background:#f7eeff;border-left:3px solid #7b2fa8;padding:.15em .5em;font-weight:bold;font-size:.82em;font-family:Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:.07em;margin-top:1.4em;margin-bottom:.3em;line-height:1.4}
+.block-bridge{color:#280a40}.block-bridge rt{color:#7b2fa8}
+p.section-other{color:#0a7a6a;background:#edfaf7;border-left:3px solid #0a7a6a;padding:.15em .5em;font-weight:bold;font-size:.82em;font-family:Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:.07em;margin-top:1.4em;margin-bottom:.3em;line-height:1.4}
+.block-other{color:#0a2820}.block-other rt{color:#0a7a6a}`;
+
+// ── UG Parser ─────────────────────────────────────────────────────────────────
+const CHORD_RE = /^[A-G][#b]?(?:maj7?|min7?|m7?|M7?|aug|dim7?|sus[24]?|add\d*|6|7|9|11|13)*(?:\/[A-G][#b]?)?$/;
+function isChordToken(t){return CHORD_RE.test(t.replace(/[()]/g,''));}
+function isChordLine(line){
+  if(!line.trim())return false;
+  const tokens=line.split(/\s+/).filter(Boolean);
+  if(!tokens.length)return false;
+  const c=tokens.filter(isChordToken).length;
+  return c>=1 && c/tokens.length>=0.6;
+}
+function isSectionMarker(line){
+  const s=line.trim();
+  return s.startsWith('[')&&s.endsWith(']')&&!isChordLine(s);
+}
+function getSectionType(m){
+  const l=m.toLowerCase();
+  if(l.includes('intro'))return'intro';
+  if(['outro','coda','fine','ending'].some(k=>l.includes(k)))return'outro';
+  if(['verse','strofa','stanza'].some(k=>l.includes(k)))return'verse';
+  if(['chorus','ritornello','refrain'].some(k=>l.includes(k)))return'chorus';
+  if(['bridge','ponte','middle'].some(k=>l.includes(k)))return'bridge';
+  return'other';
+}
+function parseChordsWithPositions(line){
+  const re=/[A-G][#b]?(?:maj7?|min7?|m7?|M7?|aug|dim7?|sus[24]?|add\d*|6|7|9|11|13)*(?:\/[A-G][#b]?)?/g;
+  const res=[]; let m;
+  while((m=re.exec(line))!==null) res.push([m.index,m[0]]);
+  return res;
+}
+function buildRubyHtml(chordLine, lyricLine){
+  const chords=parseChordsWithPositions(chordLine);
+  if(!chords.length) return esc(lyricLine);
+  const words=[...lyricLine.matchAll(/\S+/g)].map(m=>[m.index,m.index+m[0].length,m[0]]);
+  if(!words.length) return chords.map(([,c])=>`<ruby>&#160;<rt>${esc(c)}</rt></ruby>`).join(' ');
+  const wc=words.map(()=>[]);
+  for(const [cp,cn] of chords){
+    const best=words.reduce((bi,w,i)=>Math.abs(w[0]-cp)<Math.abs(words[bi][0]-cp)?i:bi,0);
+    wc[best].push(cn);
+  }
+  let html='', prev=0;
+  for(let j=0;j<words.length;j++){
+    const [ws,we,wt]=words[j];
+    if(ws>prev) html+=esc(lyricLine.slice(prev,ws));
+    html+=wc[j].length?`<ruby>${esc(wt)}<rt>${esc(wc[j].join(' '))}</rt></ruby>`:esc(wt);
+    prev=we;
+  }
+  if(prev<lyricLine.length) html+=esc(lyricLine.slice(prev));
+  return html;
+}
+function convertToHtmlBody(text){
+  const lines=text.split('\n').filter(l=>l.trim());
+  let html='', cur='other', i=0;
+  while(i<lines.length){
+    const line=lines[i];
+    if(isSectionMarker(line)){
+      cur=getSectionType(line);
+      html+=`<p class="section-${cur}">${esc(line.trim())}</p>\n`;
+      i++;
+    } else if(isChordLine(line)){
+      const bc=`block-${cur}`;
+      if(i+1<lines.length&&!isChordLine(lines[i+1])&&!isSectionMarker(lines[i+1])){
+        html+=`<p class="${bc}">${buildRubyHtml(line,lines[i+1])}</p>\n`;i+=2;
+      } else {
+        const ch=parseChordsWithPositions(line).map(([,c])=>`<ruby>&#160;<rt>${esc(c)}</rt></ruby>`).join(' ');
+        html+=`<p class="${bc}">${ch}</p>\n`;i++;
+      }
+    } else {
+      html+=`<p class="block-${cur}">${esc(line)}</p>\n`;i++;
+    }
+  }
+  return html;
+}
+
+// ── EPUB builder ──────────────────────────────────────────────────────────────
+function makeEpub(title, artist, bodyHtml){
+  const bid=crypto.randomUUID();
+  const enc=new TextEncoder();
+  const song=`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="it">
+<head><meta charset="UTF-8"/><title>${esc(title)}</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body><h1>${esc(title)}</h1><h2>${esc(artist)}</h2>${bodyHtml}</body></html>`;
+  const nav=`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="it">
+<head><meta charset="UTF-8"/><title>Indice</title></head>
+<body><nav epub:type="toc" id="toc"><h1>Indice</h1>
+<ol><li><a href="song.xhtml">${esc(title)}</a></li></ol></nav></body></html>`;
+  const opf=`<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="uid" xml:lang="it">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:title>${esc(title)}</dc:title><dc:creator>${esc(artist)}</dc:creator>
+<dc:language>it</dc:language><dc:identifier id="uid">urn:uuid:${bid}</dc:identifier>
+<meta property="dcterms:modified">2026-03-21T00:00:00Z</meta></metadata>
+<manifest>
+<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+<item id="css" href="style.css" media-type="text/css"/>
+<item id="song" href="song.xhtml" media-type="application/xhtml+xml"/>
+</manifest><spine><itemref idref="song"/></spine></package>`;
+  const cont=`<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`;
+  const z=new ZipWriter();
+  z.add('mimetype',enc.encode('application/epub+zip'));
+  z.add('META-INF/container.xml',enc.encode(cont));
+  z.add('OEBPS/content.opf',enc.encode(opf));
+  z.add('OEBPS/nav.xhtml',enc.encode(nav));
+  z.add('OEBPS/style.css',enc.encode(EPUB_CSS));
+  z.add('OEBPS/song.xhtml',enc.encode(song));
+  return z.build();
+}
+
+// ── Merge EPUB ────────────────────────────────────────────────────────────────
+function makeMergedEpub(songs){
+  const bid=crypto.randomUUID(), enc=new TextEncoder();
+  const manifest=[],spine=[],navItems=[],files={};
+  songs.forEach((s,idx)=>{
+    const fn=`song_${String(idx+1).padStart(3,'0')}.xhtml`;
+    files[fn]=`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="it">
+<head><meta charset="UTF-8"/><title>${esc(s.title)}</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>${s.body}</body></html>`;
+    manifest.push(`<item id="s${idx+1}" href="${fn}" media-type="application/xhtml+xml"/>`);
+    spine.push(`<itemref idref="s${idx+1}"/>`);
+    navItems.push(`<li><a href="${fn}">${esc(s.title)}${s.artist?' — '+esc(s.artist):''}</a></li>`);
+  });
+  const nav=`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="it">
+<head><meta charset="UTF-8"/><title>Indice</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body><nav epub:type="toc" id="toc">
+<h1 style="font-family:Helvetica,Arial,sans-serif;font-size:1.3em;margin-bottom:.8em">🎸 Canzoniere</h1>
+<ol style="line-height:2.2;font-family:Helvetica,Arial,sans-serif">${navItems.map(li=>`\n${li}`).join('')}
+</ol></nav></body></html>`;
+  const opf=`<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="uid" xml:lang="it">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:title>Canzoniere</dc:title><dc:language>it</dc:language>
+<dc:identifier id="uid">urn:uuid:${bid}</dc:identifier>
+<meta property="dcterms:modified">2026-03-21T00:00:00Z</meta></metadata>
+<manifest>
+<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+<item id="css" href="style.css" media-type="text/css"/>
+${manifest.join('\n')}
+</manifest><spine><itemref idref="nav"/>${spine.join('')}</spine></package>`;
+  const cont=`<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`;
+  const z=new ZipWriter();
+  z.add('mimetype',enc.encode('application/epub+zip'));
+  z.add('META-INF/container.xml',enc.encode(cont));
+  z.add('OEBPS/content.opf',enc.encode(opf));
+  z.add('OEBPS/nav.xhtml',enc.encode(nav));
+  z.add('OEBPS/style.css',enc.encode(EPUB_CSS));
+  for(const [fn,content] of Object.entries(files)) z.add(`OEBPS/${fn}`,enc.encode(content));
+  return z.build();
+}
+
+// ── Download helper ───────────────────────────────────────────────────────────
+function downloadBlob(data, filename){
+  const blob=new Blob([data],{type:'application/epub+zip'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),500);
+}
+
+function setStatus(msg, ok){
+  const el=document.getElementById('status');
+  el.textContent=msg; el.className=ok?'ok':'err';
+}
+
+// ── UI actions ────────────────────────────────────────────────────────────────
+function generateEpub(){
+  const title=document.getElementById('titleInput').value.trim();
+  const artist=document.getElementById('artistInput').value.trim()||'Sconosciuto';
+  const text=document.getElementById('ugText').value.trim();
+  if(!title){alert('Inserisci il titolo della canzone.');return;}
+  if(!text){alert('Incolla il testo con accordi.');return;}
+  try{
+    const body=convertToHtmlBody(text);
+    const epub=makeEpub(title,artist,body);
+    const safe=(title+' - '+artist).replace(/[^\w\s\-]/g,'').trim().slice(0,80);
+    downloadBlob(epub, safe+'.epub');
+    setStatus('✅ EPUB generato — controlla Download o "Apri in Books"', true);
+  }catch(e){setStatus('❌ Errore: '+e.message, false);}
+}
+
+function clearFields(){
+  document.getElementById('titleInput').value='';
+  document.getElementById('artistInput').value='';
+  document.getElementById('ugText').value='';
+  document.getElementById('status').className='';
+  document.getElementById('status').textContent='';
+}
+
+function mergeEpubs(){
+  const input=document.createElement('input');
+  input.type='file'; input.accept='.epub'; input.multiple=true;
+  input.onchange=async()=>{
+    const files=[...input.files];
+    if(files.length<2){alert('Seleziona almeno 2 file EPUB.');return;}
+    try{
+      const songs=[];
+      for(const f of files){
+        const buf=await f.arrayBuffer();
+        const entries=readZip(buf);
+        const dec=new TextDecoder();
+        const opfText=dec.decode(entries['OEBPS/content.opf']||new Uint8Array());
+        const titleM=opfText.match(/<dc:title[^>]*>(.*?)<\/dc:title>/);
+        const artistM=opfText.match(/<dc:creator[^>]*>(.*?)<\/dc:creator>/);
+        const songText=dec.decode(entries['OEBPS/song.xhtml']||new Uint8Array());
+        const bodyM=songText.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+        songs.push({
+          title:titleM?titleM[1]:f.name.replace('.epub',''),
+          artist:artistM?artistM[1]:'',
+          body:bodyM?bodyM[1]:''
+        });
+      }
+      const epub=makeMergedEpub(songs);
+      downloadBlob(epub,'Canzoniere.epub');
+      setStatus(`✅ Canzoniere con ${songs.length} canzoni generato`,true);
+    }catch(e){setStatus('❌ Errore: '+e.message,false);}
+  };
+  input.click();
+}
+</script>
+</body>
+</html>
